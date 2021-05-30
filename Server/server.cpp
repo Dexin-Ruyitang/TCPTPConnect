@@ -1,9 +1,15 @@
 #include"stdafx.h"
 
+using namespace std;
+
 #define PORT 65432
 #define LOCALHOST "127.0.0.1"
 
-using namespace std;
+volatile bool iThreadReceive = false;
+volatile bool iThreadSend = false;
+
+DWORD WINAPI ThreadReceive(LPVOID lpThreadParameter);
+DWORD WINAPI ThreadSend(LPVOID lpThreadParameter);
 
 int main()
 {
@@ -53,10 +59,15 @@ int main()
         SOCKET con = accept(socketServer, (SOCKADDR*)&addrClient, &len);
         if (con != INVALID_SOCKET)
         {
+            cout << "成功和" << con << "建立连接！" << endl;
             //创建线程，并传入与client通讯的套接字
-            HANDLE hThread = CreateThread(NULL, 0, ThreadFun, (LPVOID)con, 0, NULL);
+            HANDLE hThreadSend = CreateThread(NULL, 0, ThreadSend, (LPVOID)con, 0, NULL);
+            iThreadSend = true;
+            HANDLE hThreadReceive = CreateThread(NULL, 0, ThreadReceive, (LPVOID)con, 0, NULL);
+            iThreadReceive = true;
             //关闭对线程的引用
-            CloseHandle(hThread);
+            CloseHandle(hThreadSend);
+            CloseHandle(hThreadReceive);
         }
     }
     closesocket(socketServer);
@@ -67,16 +78,20 @@ int main()
 }
 
 //线程通讯部分
-DWORD WINAPI ThreadFun(LPVOID lpThreadParameter)
+
+//发送数据
+DWORD WINAPI ThreadSend(LPVOID lpThreadParameter)
 {
-    //与客户端通讯，先发送再接收数据
+    //与客户端通讯
     SOCKET sock = (SOCKET)lpThreadParameter;
-    cout << "成功和" << sock << "建立连接！" << endl;
     while (1)
     {
+        if (!iThreadReceive)
+        {
+            return 0;
+        }
         //字符缓冲区
         char msgBuffer[1024];
-        cout << "服务器向" << sock << "发送数据：";
         cin.getline(msgBuffer, sizeof(msgBuffer));
         //给客户端发送一条消息
         int size = send(sock, msgBuffer, sizeof(msgBuffer), 0);
@@ -92,7 +107,22 @@ DWORD WINAPI ThreadFun(LPVOID lpThreadParameter)
         }
         /*else
             cout << "信息发送成功！" << endl;*/
+    }
+}
 
+//接收数据
+DWORD WINAPI ThreadReceive(LPVOID lpThreadParameter)
+{
+    //与客户端通讯
+    SOCKET sock = (SOCKET)lpThreadParameter;
+    while (1)
+    {
+        if (!iThreadSend)
+        {
+            return 0;
+        }
+        //字符缓冲区
+        char msgBuffer[1024];
         //接收客户端数据
         msgBuffer[1023] = { 0 };
         int ret = recv(sock, msgBuffer, sizeof(msgBuffer), 0);
